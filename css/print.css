@@ -1,0 +1,71 @@
+/* ==========================================================================
+   print.css - Стили для чистой печати шпаргалки и сохранения в PDF
+   ========================================================================== */
+
+@media print {
+  /* Скрываем навигацию и лишние интерактивные элементы */
+  .app-header,
+  .nav-tabs,
+  .btn-print,
+  .search-box,
+  .category-pills,
+  .action-buttons-row,
+  .btn-open-lab,
+  .btn-try-transform,
+  #view-playground,
+  #view-catalog,
+  #view-transforms,
+  #view-trainer {
+    display: none !important;
+  }
+
+  /* Показываем только шпаргалку */
+  #view-cheatsheet {
+    display: block !important;
+  }
+
+  body {
+    background: #ffffff !important;
+    background-image: none !important;
+    color: #000000 !important;
+    font-size: 11pt;
+  }
+
+  .main-content {
+    max-width: 100% !important;
+    padding: 0 !important;
+    margin: 0 !important;
+  }
+
+  .cheat-section {
+    border: 1px solid #000000 !important;
+    box-shadow: none !important;
+    page-break-inside: avoid;
+    margin-bottom: 15px !important;
+    padding: 12px !important;
+  }
+
+  .cheat-table {
+    width: 100% !important;
+    border-collapse: collapse !important;
+  }
+
+  .cheat-table th,
+  .cheat-table td {
+    border: 1px solid #333333 !important;
+    color: #000000 !important;
+    padding: 6px 8px !important;
+    font-size: 9pt !important;
+  }
+
+  .section-badge {
+    background: #000000 !important;
+    color: #ffffff !important;
+  }
+
+  .banner-badge,
+  .step-pill,
+  .tip-card {
+    border: 1px solid #000000 !important;
+  }
+}

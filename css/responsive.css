@@ -1,0 +1,187 @@
+/* ==========================================================================
+   responsive.css - Мобильная адаптивность и Touch-оптимизация
+   ========================================================================== */
+
+/* Планшеты и узкие экраны (<= 1024px) */
+@media (max-width: 1024px) {
+  .pg-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .canvas-container {
+    height: 460px;
+  }
+
+  .trainer-card {
+    grid-template-columns: 1fr;
+  }
+
+  .trainer-canvas-container {
+    border-right: none;
+    border-bottom: 1px solid var(--border-subtle);
+  }
+}
+
+/* Мобильные телефоны (<= 768px) */
+@media (max-width: 768px) {
+  :root {
+    --header-height: 58px;
+  }
+
+  .header-container {
+    padding: 0 12px;
+  }
+
+  .brand-logo span {
+    font-size: 1rem;
+  }
+  .brand-badge {
+    display: none; /* скрываем бейдж на узких экранах */
+  }
+
+  .nav-tabs {
+    gap: 4px;
+  }
+  .nav-tab-btn {
+    padding: 6px 10px;
+    font-size: 0.84rem;
+    min-height: 38px;
+  }
+
+  .main-content {
+    padding: 12px 10px 60px 10px;
+  }
+
+  /* Лаборатория на мобильном */
+  .canvas-container {
+    height: 360px; /* Идеальная высота, оставляющая место под панель */
+  }
+
+  .formula-overlay-card {
+    padding: 12px 14px;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 8px;
+  }
+
+  .formula-main {
+    font-size: 1.15rem;
+  }
+
+  .canvas-legend {
+    gap: 10px;
+    font-size: 0.78rem;
+    flex-wrap: wrap;
+  }
+
+  .inspector-bar {
+    font-size: 0.8rem;
+    padding: 8px 12px;
+    flex-wrap: wrap;
+  }
+
+  .pg-controls-card {
+    padding: 14px;
+    gap: 16px;
+  }
+
+  .presets-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .slider-control-card {
+    padding: 10px 12px;
+  }
+
+  .btn-step {
+    width: 44px; /* Крупная кнопка для пальца */
+    height: 44px;
+    font-size: 1.3rem;
+  }
+
+  .checkbox-row {
+    grid-template-columns: 1fr;
+  }
+
+  /* Каталог и Преобразования */
+  .catalog-grid,
+  .transforms-cards-grid {
+    grid-template-columns: 1fr;
+    gap: 16px;
+  }
+
+  .function-card,
+  .transform-card {
+    border-radius: var(--radius-md);
+  }
+
+  .card-canvas-wrapper,
+  .transform-card-canvas {
+    height: 190px;
+  }
+
+  .card-content,
+  .transform-card-body {
+    padding: 14px;
+  }
+
+  .transforms-intro-banner,
+  .canonical-rule-banner,
+  .cheat-section {
+    padding: 16px;
+  }
+
+  .banner-math {
+    font-size: 1.1rem;
+    overflow-x: auto;
+  }
+
+  /* Таблицы шпоры */
+  .cheat-table th,
+  .cheat-table td {
+    padding: 8px 10px;
+    font-size: 0.82rem;
+  }
+
+  .cheat-pipeline-box {
+    gap: 8px;
+  }
+  .pipeline-step-card {
+    min-width: 140px;
+    padding: 10px;
+  }
+
+  /* Тренажёр */
+  .trainer-canvas {
+    height: 280px;
+  }
+
+  .trainer-interactive-panel {
+    padding: 16px;
+    gap: 14px;
+  }
+
+  .trainer-mode-selector {
+    flex-direction: column;
+    gap: 6px;
+  }
+}
+
+/* Сверхкомпактные экраны (<= 380px, например iPhone SE) */
+@media (max-width: 380px) {
+  .canvas-container {
+    height: 310px;
+  }
+
+  .presets-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .btn {
+    width: 100%;
+  }
+
+  .card-properties-table {
+    font-size: 0.78rem;
+  }
+}
