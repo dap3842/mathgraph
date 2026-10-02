@@ -335,6 +335,42 @@
   color: var(--text-muted);
 }
 
+.trig-step-chips {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin-top: 4px;
+  padding-top: 6px;
+  border-top: 1px dashed var(--border-subtle);
+}
+
+.chip-label {
+  font-size: 0.76rem;
+  color: var(--text-muted);
+  width: 100%;
+}
+
+.btn-chip {
+  padding: 3px 8px;
+  font-family: var(--font-mono);
+  font-size: 0.78rem;
+  font-weight: 600;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-subtle);
+  background: #ffffff;
+  color: var(--color-primary);
+  cursor: pointer;
+  transition: all 0.15s ease;
+  min-height: 28px;
+}
+
+.btn-chip:hover {
+  background: var(--color-primary);
+  color: #ffffff;
+  border-color: var(--color-primary);
+}
+
 /* Переключатели отражений и модулей */
 .toggles-grid {
   display: flex;
@@ -589,6 +625,58 @@
   border-radius: var(--radius-full);
   color: var(--text-secondary);
   backdrop-filter: blur(4px);
+}
+
+/* Кнопки зума на интерактивных мини-холстах */
+.card-canvas-controls {
+  position: absolute;
+  bottom: 8px;
+  right: 8px;
+  display: flex;
+  gap: 4px;
+  background: rgba(255, 255, 255, 0.92);
+  padding: 3px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-subtle);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+  backdrop-filter: blur(4px);
+  z-index: 10;
+}
+
+.btn-canvas-ctrl {
+  width: 30px;
+  height: 30px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-strong);
+  background: #ffffff;
+  color: var(--text-main);
+  font-size: 1.05rem;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.12s ease;
+  user-select: none;
+}
+
+.btn-canvas-ctrl:hover {
+  background: var(--color-primary-light);
+  color: var(--color-primary);
+  border-color: rgba(37, 99, 235, 0.4);
+}
+
+.btn-canvas-ctrl:active {
+  transform: scale(0.92);
+}
+
+.short-test-desc {
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+  line-height: 1.4;
+}
+.short-test-desc b {
+  color: var(--text-main);
 }
 
 .card-content {

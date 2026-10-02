@@ -181,7 +181,7 @@
       summary: 'Сначала f(|x|), затем ко всему модуль |...|',
       mnemonic: 'Сначала симметрия относительно Oy, затем все из-под Ox наверх',
       description: 'Комбинация двух действий: 1) Стереть левую часть, отразить правую налево f(|x|). 2) Затем все, что оказалось ниже оси Ox, перевернуть вверх.',
-      pointTransform: 'Композиция правил внутреннего и внешнего модулей',
+      pointTransform: '(x_0; y_0) \\to (|x_0|; |f(|x_0|)|)',
       example: {
         fnId: 'linear_down',
         a: 0, b: 0, k: 1, m: 1, absOuter: true, absInner: true,
@@ -189,6 +189,40 @@
       }
     }
   ];
+
+  /**
+   * Преобразует числовое значение в красивый LaTeX-код дроби числа \pi
+   */
+  function toLatexPi(val) {
+    if (Math.abs(val) < 1e-4) return null;
+    const pi = Math.PI;
+    const absVal = Math.abs(val);
+    const fractions = [
+      { ratio: 1/6,  latex: '\\frac{\\pi}{6}' },
+      { ratio: 1/4,  latex: '\\frac{\\pi}{4}' },
+      { ratio: 1/3,  latex: '\\frac{\\pi}{3}' },
+      { ratio: 1/2,  latex: '\\frac{\\pi}{2}' },
+      { ratio: 2/3,  latex: '\\frac{2\\pi}{3}' },
+      { ratio: 3/4,  latex: '\\frac{3\\pi}{4}' },
+      { ratio: 5/6,  latex: '\\frac{5\\pi}{6}' },
+      { ratio: 1,    latex: '\\pi' },
+      { ratio: 5/4,  latex: '\\frac{5\\pi}{4}' },
+      { ratio: 4/3,  latex: '\\frac{4\\pi}{3}' },
+      { ratio: 3/2,  latex: '\\frac{3\\pi}{2}' },
+      { ratio: 7/4,  latex: '\\frac{7\\pi}{4}' },
+      { ratio: 2,    latex: '2\\pi' }
+    ];
+    for (const f of fractions) {
+      if (Math.abs(absVal - f.ratio * pi) < 0.06) {
+        return f.latex;
+      }
+    }
+    const intK = Math.round(absVal / pi);
+    if (Math.abs(absVal - intK * pi) < 0.06 && intK > 0) {
+      return intK === 1 ? '\\pi' : `${intK}\\pi`;
+    }
+    return null;
+  }
 
   /**
    * Вычисляет значение преобразованной функции g(x)
@@ -355,7 +389,12 @@
     }
 
     if (a !== 0) {
-      argStr = a > 0 ? `${argStr} - ${a}` : `${argStr} + ${Math.abs(a)}`;
+      let aText = Math.abs(a);
+      if (baseInfo.isTrig) {
+        const piTex = toLatexPi(Math.abs(a));
+        if (piTex) aText = piTex;
+      }
+      argStr = a > 0 ? `${argStr} - ${aText}` : `${argStr} + ${aText}`;
     }
 
     if (effM !== 1) {
@@ -430,7 +469,12 @@
 
     // Вертикальный сдвиг b
     if (b !== 0) {
-      fullStr = b > 0 ? `${fullStr} + ${b}` : `${fullStr} - ${Math.abs(b)}`;
+      let bText = Math.abs(b);
+      if (baseInfo.isInvTrig) {
+        const piTex = toLatexPi(Math.abs(b));
+        if (piTex) bText = piTex;
+      }
+      fullStr = b > 0 ? `${fullStr} + ${bText}` : `${fullStr} - ${bText}`;
     }
 
     // Внешний модуль

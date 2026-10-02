@@ -2,7 +2,8 @@
  * transforms-view.js
  * Визуальный атлас всех видов преобразований графиков («Список преобразований»).
  * Для каждого преобразования:
- * - Наглядный мини-холст: исходный график пунктиром -> преобразованный яркой линией + стрелка
+ * - Интерактивный мини-холст (зум + / - и перетаскивание)
+ * - Исходный график пунктиром -> преобразованный яркой линией + стрелка
  * - Формула KaTeX и мнемоническое правило для зачета
  * - Закон изменения координат точки (x0, y0) -> (x', y')
  * - Раскрывающиеся методические аккордеоны
@@ -18,7 +19,7 @@
 }(typeof self !== 'undefined' ? self : this, function () {
 
   let containerEl = null;
-  const miniCanvases = [];
+  const miniCanvasesMap = new Map();
 
   function init(targetContainer) {
     containerEl = targetContainer;
@@ -29,6 +30,7 @@
     if (!containerEl) return;
 
     const rules = window.TransformCore.RULES;
+    miniCanvasesMap.clear();
 
     containerEl.innerHTML = `
       <div class="transforms-intro-banner">
@@ -37,6 +39,7 @@
           <p>
             Каждое преобразование показано наглядно: <b>исходный график f(x)</b> изображён серым пунктиром,
             а <b>результат</b> — яркой синей линией со стрелками направления.
+            Каждый график можно приближать, отдалять и двигать пальцем или мышкой!
           </p>
         </div>
       </div>
@@ -65,6 +68,13 @@
               <span class="transform-type-tag transform-type-${rule.type}">
                 ${rule.type === 'shift' ? 'Сдвиг' : rule.type === 'scale' ? 'Масштаб' : rule.type === 'symmetry' ? 'Симметрия' : 'Модуль'}
               </span>
+
+              <!-- Интерактивные кнопки масштаба прямо на карточке -->
+              <div class="card-canvas-controls">
+                <button class="btn-canvas-ctrl btn-zoom-in" data-rule-fn="${rule.id}" title="Приблизить">+</button>
+                <button class="btn-canvas-ctrl btn-zoom-out" data-rule-fn="${rule.id}" title="Отдалить">−</button>
+                <button class="btn-canvas-ctrl btn-zoom-reset" data-rule-fn="${rule.id}" title="Сбросить масштаб">⟲</button>
+              </div>
             </div>
 
             <div class="transform-card-body">
@@ -116,9 +126,27 @@
       window.renderAllMathIn(containerEl);
     }
 
-    // Инициализация мини-холстов
+    // Инициализация интерактивных мини-холстов
     rules.forEach(rule => {
       initTransformMiniCanvas(rule);
+    });
+
+    // Обработка кнопок зума на карточках
+    containerEl.querySelectorAll('.btn-canvas-ctrl').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const ruleId = btn.dataset.ruleFn;
+        const mini = miniCanvasesMap.get(ruleId);
+        if (!mini) return;
+
+        if (btn.classList.contains('btn-zoom-in')) {
+          mini.setZoom(mini.scale * 1.25);
+        } else if (btn.classList.contains('btn-zoom-out')) {
+          mini.setZoom(mini.scale * 0.8);
+        } else if (btn.classList.contains('btn-zoom-reset')) {
+          mini.resetView();
+        }
+      });
     });
 
     // Обработка кнопки перехода в лабораторию
@@ -140,16 +168,19 @@
     const baseFn = window.MathCore.getFunctionById(rule.example.fnId || 'parabola');
     if (!baseFn) return;
 
+    // Включаем интерактивность (isInteractive: true)!
     const mini = new window.MathCanvas(canvasEl, {
-      isInteractive: false,
+      isInteractive: true,
       defaultScale: baseFn.isTrig ? 24 : 26,
+      originYRatio: baseFn.originYRatio ?? 0.5,
       showGrid: true,
       showAxes: true,
       showLabels: true,
       showAsymptotes: true,
       showKeyPoints: true,
-      showCrosshair: false,
-      isTrigMode: Boolean(baseFn.isTrig)
+      showCrosshair: true,
+      isTrigMode: Boolean(baseFn.isTrig),
+      isInvTrigMode: Boolean(baseFn.isInvTrig)
     });
 
     // 1. Исходный график (призрак)
@@ -196,7 +227,7 @@
     }
 
     mini.render();
-    miniCanvases.push(mini);
+    miniCanvasesMap.set(rule.id, mini);
   }
 
   return {

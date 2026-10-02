@@ -2,42 +2,32 @@
  * app.js
  * Главный модуль управления SPA (Single Page Application).
  * - Маршрутизация по вкладкам (#playground, #catalog, #transforms, #cheatsheet, #trainer)
- * - Интеграция KaTeX с надежным отказоустойчивым fallback
+ * - Интеграция KaTeX с надежным отказоустойчивым fallback на Unicode
+ * - Автоматический повторный рендеринг при готовности KaTeX
  * - Синхронизация состояния между вкладками
  */
 
 (function () {
   'use strict';
 
-  // 1. Хелпер рендеринга формул KaTeX с текстовым fallback
-  function renderMath(latexString, targetEl) {
-    if (!targetEl) return;
-
-    if (window.katex) {
-      try {
-        window.katex.render(latexString, targetEl, {
-          throwOnError: false,
-          displayMode: targetEl.classList.contains('math-display')
-        });
-        return;
-      } catch (e) {
-        console.warn('KaTeX render error:', e);
-      }
-    }
-
-    // Fallback: заменяем популярные символы на читаемый Unicode
-    let readable = latexString
+  // Комплексный fallback на красивый Unicode для случаев, когда KaTeX не загружен
+  function formatLatexFallback(latexString) {
+    if (!latexString) return '';
+    return latexString
       .replace(/\\mathbb\{R\}/g, 'ℝ')
-      .replace(/\\sqrt\{([^}]+)\}/g, '√($1)')
+      .replace(/\\mathbb\{N\}/g, 'ℕ')
+      .replace(/\\mathbb\{Z\}/g, 'ℤ')
       .replace(/\\sqrt\[3\]\{([^}]+)\}/g, '∛($1)')
-      .replace(/\\sin/g, 'sin')
-      .replace(/\\cos/g, 'cos')
+      .replace(/\\sqrt\{([^}]+)\}/g, '√($1)')
+      .replace(/\\frac\{([^}]+)\}\{([^}]+)\}/g, '($1)/($2)')
       .replace(/\\operatorname\{tg\}/g, 'tg')
       .replace(/\\operatorname\{ctg\}/g, 'ctg')
-      .replace(/\\arcsin/g, 'arcsin')
-      .replace(/\\arccos/g, 'arccos')
       .replace(/\\operatorname\{arctg\}/g, 'arctg')
       .replace(/\\operatorname\{arcctg\}/g, 'arcctg')
+      .replace(/\\arcsin/g, 'arcsin')
+      .replace(/\\arccos/g, 'arccos')
+      .replace(/\\sin/g, 'sin')
+      .replace(/\\cos/g, 'cos')
       .replace(/\\log_\{([^}]+)\}/g, 'log_$1')
       .replace(/\\ln/g, 'ln')
       .replace(/\\pi/g, 'π')
@@ -45,42 +35,81 @@
       .replace(/\\cup/g, '∪')
       .replace(/\\times/g, '×')
       .replace(/\\cdot/g, '·')
-      .replace(/\\frac\{([^}]+)\}\{([^}]+)\}/g, '($1)/($2)')
+      .replace(/\\le/g, '≤')
+      .replace(/\\ge/g, '≥')
+      .replace(/\\neq/g, '≠')
+      .replace(/\\pm/g, '±')
+      .replace(/\\to/g, '→')
+      .replace(/\\longrightarrow/g, '⟶')
       .replace(/\\left\|/g, '|')
       .replace(/\\right\|/g, '|')
-      .replace(/\\{/g, '{')
-      .replace(/\\}/g, '}')
-      .replace(/\\\\/g, '; ');
+      .replace(/\\left\(/g, '(')
+      .replace(/\\right\)/g, ')')
+      .replace(/\\left\[/g, '[')
+      .replace(/\\right\]/g, ']')
+      .replace(/\\\{/g, '{')
+      .replace(/\\\}/g, '}')
+      .replace(/\\\\/g, '; ')
+      .replace(/\^2\b/g, '²')
+      .replace(/\^3\b/g, '³')
+      .replace(/\^4\b/g, '⁴')
+      .replace(/\^5\b/g, '⁵')
+      .replace(/\\;/g, ' ')
+      .replace(/\\quad/g, '  ')
+      .replace(/\\/g, ''); // убираем оставшиеся обратные слэши
+  }
 
-    targetEl.textContent = readable;
+  function renderMath(latexString, targetEl) {
+    if (!targetEl) return;
+    targetEl.dataset.rawLatex = latexString;
+
+    if (window.katex) {
+      try {
+        const isDisplay = targetEl.classList.contains('math-display');
+        window.katex.render(latexString, targetEl, {
+          throwOnError: false,
+          displayMode: isDisplay
+        });
+        return;
+      } catch (e) {
+        console.warn('KaTeX render error:', e);
+      }
+    }
+
+    targetEl.textContent = formatLatexFallback(latexString);
   }
 
   function renderAllMathIn(container) {
     if (!container) return;
-
-    if (window.renderMathInElement) {
-      try {
-        window.renderMathInElement(container, {
-          delimiters: [
-            { left: '$$', right: '$$', display: true },
-            { left: '$', right: '$', display: false }
-          ],
-          throwOnError: false
-        });
-        return;
-      } catch (e) {
-        console.warn('renderMathInElement error:', e);
-      }
-    }
-
-    // Обработка элементов с классом math-display и math-inline
     container.querySelectorAll('.math-display, .math-inline').forEach(el => {
-      renderMath(el.textContent.trim(), el);
+      const raw = el.dataset.rawLatex || el.textContent.trim();
+      renderMath(raw, el);
     });
   }
 
   window.renderMath = renderMath;
   window.renderAllMathIn = renderAllMathIn;
+
+  // Автоматический перезапуск рендеринга формул, когда KaTeX готов
+  function setupKatexWatcher() {
+    let attempts = 0;
+    const interval = setInterval(() => {
+      attempts++;
+      if (window.katex) {
+        clearInterval(interval);
+        // Перерисовываем все уже отрендеренные формулы через настоящий KaTeX
+        renderAllMathIn(document.body);
+      } else if (attempts > 30) {
+        clearInterval(interval);
+      }
+    }, 100);
+
+    window.addEventListener('load', () => {
+      if (window.katex) {
+        renderAllMathIn(document.body);
+      }
+    });
+  }
 
   // 2. Роутер вкладок SPA
   const AppRouter = {
@@ -111,48 +140,43 @@
     switchTab(tabId, customFnId = null, customParams = null, updateHash = true) {
       this.activeTab = tabId;
 
-      // 1. Обновляем активную вкладку в навигации
       document.querySelectorAll('.nav-tab-btn').forEach(btn => {
         const isActive = btn.dataset.tab === tabId;
         btn.classList.toggle('nav-tab-active', isActive);
         btn.setAttribute('aria-selected', isActive ? 'true' : 'false');
       });
 
-      // 2. Переключаем видимость экранов
       document.querySelectorAll('.tab-view').forEach(view => {
         const isCurrent = view.id === `view-${tabId}`;
         view.classList.toggle('tab-view-active', isCurrent);
       });
 
-      // 3. Обновляем URL хеш
       if (updateHash) {
         window.location.hash = tabId;
       }
 
-      // 4. Скроллим наверх
       window.scrollTo({ top: 0, behavior: 'instant' });
 
-      // 5. Вызываем жизненный цикл соответствующей вкладки
       if (tabId === 'playground') {
         if (customFnId && window.Playground) {
           window.Playground.setBaseFunction(customFnId);
           if (customParams) {
-            // Применение параметров
             setTimeout(() => {
               if (customParams.a !== undefined) document.getElementById('slider-a').value = customParams.a;
               if (customParams.b !== undefined) document.getElementById('slider-b').value = customParams.b;
               if (customParams.k !== undefined) document.getElementById('slider-k').value = customParams.k;
               if (customParams.m !== undefined) document.getElementById('slider-m').value = customParams.m;
-              // Запуск input события
               document.getElementById('slider-a')?.dispatchEvent(new Event('input'));
             }, 50);
           }
         }
-      } else if (tabId === 'catalog') {
-        // перерисовка каталога при входе
-      } else if (tabId === 'trainer') {
-        // перерисовка холста тренажера
       }
+
+      // После переключения вкладки удостоверяемся, что формулы отрисованы
+      setTimeout(() => {
+        const activeView = document.getElementById(`view-${tabId}`);
+        if (activeView) renderAllMathIn(activeView);
+      }, 20);
     }
   };
 
@@ -160,7 +184,8 @@
 
   // 3. Запуск при загрузке документа
   document.addEventListener('DOMContentLoaded', () => {
-    // Инициализация модулей
+    setupKatexWatcher();
+
     const pgCanvas = document.getElementById('pg-canvas');
     const pgControls = document.getElementById('pg-controls');
     if (pgCanvas && window.Playground) {

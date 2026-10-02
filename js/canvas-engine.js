@@ -5,6 +5,7 @@
  * - Поддержка High-DPI (Retina) дисплеев
  * - Адаптивная миллиметровка в светлом академическом стиле
  * - Умный выбор шага сетки (Nice Numbers 1, 2, 5) и тригонометрическая Pi-разметка
+ * - Отображение значений в долях π (π/2, π, 3π/2 и т.д.) вместо десятичных дробей
  * - Корректная обработка разрывов и вертикальных/горизонтальных асимптот
  * - Сенсорные жесты: 1 палец Pan, 2 пальца Pinch-to-Zoom, колесо мыши
  * - Инспектор координат с перекрестием
@@ -19,6 +20,60 @@
   }
 }(typeof self !== 'undefined' ? self : this, function () {
 
+  /**
+   * Преобразует числовое значение в красивую форму дроби числа π,
+   * если оно близко к стандартным углам тригонометрии
+   */
+  function formatPiValue(val, forcePi = false) {
+    if (Math.abs(val) < 1e-4) return '0';
+
+    const pi = Math.PI;
+    const fractions = [
+      { ratio: 1/6,  text: 'π/6' },
+      { ratio: 1/4,  text: 'π/4' },
+      { ratio: 1/3,  text: 'π/3' },
+      { ratio: 1/2,  text: 'π/2' },
+      { ratio: 2/3,  text: '2π/3' },
+      { ratio: 3/4,  text: '3π/4' },
+      { ratio: 5/6,  text: '5π/6' },
+      { ratio: 1,    text: 'π' },
+      { ratio: 7/6,  text: '7π/6' },
+      { ratio: 5/4,  text: '5π/4' },
+      { ratio: 4/3,  text: '4π/3' },
+      { ratio: 3/2,  text: '3π/2' },
+      { ratio: 5/3,  text: '5π/3' },
+      { ratio: 7/4,  text: '7π/4' },
+      { ratio: 11/6, text: '11π/6' },
+      { ratio: 2,    text: '2π' },
+      { ratio: 5/2,  text: '5π/2' },
+      { ratio: 3,    text: '3π' },
+      { ratio: 7/2,  text: '7π/2' },
+      { ratio: 4,    text: '4π' }
+    ];
+
+    const sign = val < 0 ? '-' : '';
+    const absVal = Math.abs(val);
+
+    for (const f of fractions) {
+      if (Math.abs(absVal - f.ratio * pi) < 0.08) {
+        return sign + f.text;
+      }
+    }
+
+    // Проверка целых кратных: 5π, 6π...
+    const intK = Math.round(absVal / pi);
+    if (Math.abs(absVal - intK * pi) < 0.08 && intK > 0) {
+      return sign + (intK === 1 ? 'π' : `${intK}π`);
+    }
+
+    if (forcePi) {
+      const ratio = val / pi;
+      return `${Number(ratio.toFixed(2)).toString().replace('.', ',')}π`;
+    }
+
+    return (val < 0 ? '-' : '') + Number(absVal.toFixed(2)).toString().replace('.', ',');
+  }
+
   class CartesianCanvas {
     constructor(canvasElement, options = {}) {
       this.canvas = canvasElement;
@@ -32,37 +87,40 @@
         showKeyPoints: true,
         showCrosshair: true,
         isTrigMode: false,
+        isInvTrigMode: false,
         theme: 'light',
-        defaultScale: 40, // пикселей на 1 математическую единицу
+        defaultScale: 40,
         minScale: 8,
         maxScale: 350,
         originX: null,
-        originY: null
+        originY: null,
+        originYRatio: 0.5
       }, options);
 
       // Визуальная палитра (Академическая миллиметровка)
       this.colors = {
         bg: '#F8FAFC',
-        paperGridSub: '#EEF2F6',   // мелкая сетка (миллиметровка)
-        paperGridMain: '#CBD5E1',  // основные линии сетки
-        axis: '#334155',           // координатные оси
-        axisText: '#475569',       // подписи делений
-        ghost: 'rgba(100, 116, 139, 0.45)', // исходная функция y = f(x)
-        primary: '#2563EB',        // преобразованная функция y = g(x)
-        secondary: '#059669',      // вторая функция (сравнение)
+        paperGridSub: '#EEF2F6',   // мелкая сетка
+        paperGridMain: '#CBD5E1',  // основные линии
+        axis: '#334155',           // оси
+        axisText: '#475569',       // деления
+        ghost: 'rgba(100, 116, 139, 0.45)', // исходная f(x)
+        primary: '#2563EB',        // результат g(x)
+        secondary: '#059669',
         asymptote: '#DC2626',      // асимптоты
-        vector: '#EA580C',         // вектор смещения
-        anchor: '#1E293B',         // опорные точки
+        vector: '#EA580C',         // вектор сдвига
+        anchor: '#1E293B',
         crosshair: 'rgba(37, 99, 235, 0.3)'
       };
 
       // Масштаб и центр координат
       this.scale = this.options.defaultScale;
+      this.originYRatio = this.options.originYRatio ?? 0.5;
       this.originX = this.options.originX;
       this.originY = this.options.originY;
 
-      // Слои функций для отрисовки
-      this.layers = []; // { id, fn, params, style: 'active' | 'ghost' | 'secondary', asymptotes, keyPoints }
+      // Слои функций
+      this.layers = [];
 
       // Состояние жестов
       this.pointerCache = new Map();
@@ -74,8 +132,8 @@
       this.cursorMathY = null;
       this.onInspectorMove = null;
 
-      // Вектор сдвига (опционально)
-      this.displacementVector = null; // { from: [x,y], to: [x,y], label: 'v' }
+      // Вектор сдвига
+      this.displacementVector = null;
 
       this.init();
     }
@@ -88,7 +146,6 @@
         this.bindEvents();
       }
 
-      // Наблюдатель изменения размеров контейнера
       if (typeof ResizeObserver !== 'undefined') {
         this.resizeObserver = new ResizeObserver(() => this.resize());
         this.resizeObserver.observe(this.canvas);
@@ -103,7 +160,6 @@
       const rect = this.canvas.getBoundingClientRect();
       const dpr = window.devicePixelRatio || 1;
 
-      // Реальные пиксели холста
       this.width = rect.width;
       this.height = rect.height;
 
@@ -115,17 +171,26 @@
       this.ctx.resetTransform?.();
       this.ctx.scale(dpr, dpr);
 
-      // Если центр не был задан, устанавливаем в центр экрана
       if (this.originX === null) this.originX = this.width / 2;
-      if (this.originY === null) this.originY = this.height / 2;
+      if (this.originY === null) this.originY = this.height * this.originYRatio;
 
+      this.render();
+    }
+
+    setOriginYRatio(ratio, newScale = null) {
+      this.originYRatio = ratio;
+      if (this.height) {
+        this.originY = this.height * ratio;
+      }
+      if (newScale) {
+        this.scale = newScale;
+      }
       this.render();
     }
 
     bindEvents() {
       const el = this.canvas;
 
-      // Pointer Events для универсальной работы мыши и тач-экрана
       el.addEventListener('pointerdown', (e) => {
         el.setPointerCapture?.(e.pointerId);
         this.pointerCache.set(e.pointerId, { x: e.clientX, y: e.clientY });
@@ -146,6 +211,33 @@
         const mouseY = e.clientY - rect.top;
 
         [this.cursorMathX, this.cursorMathY] = this.screenToMath(mouseX, mouseY);
+
+        if (this.options.isTrigMode) {
+          const pi = Math.PI;
+          const trigTargets = [
+            -4*pi, -7*pi/2, -3*pi, -5*pi/2, -2*pi, -7*pi/4, -5*pi/3, -3*pi/2, -4*pi/3, -5*pi/4, -pi,
+            -5*pi/6, -3*pi/4, -2*pi/3, -pi/2, -pi/3, -pi/4, -pi/6, 0,
+            pi/6, pi/4, pi/3, pi/2, 2*pi/3, 3*pi/4, 5*pi/6, pi,
+            5*pi/4, 4*pi/3, 3*pi/2, 5*pi/3, 7*pi/4, 2*pi, 5*pi/2, 3*pi, 7*pi/2, 4*pi
+          ];
+          for (const target of trigTargets) {
+            const [targetPx] = this.mathToScreen(target, 0);
+            if (Math.abs(mouseX - targetPx) < 12) {
+              this.cursorMathX = target;
+              break;
+            }
+          }
+        } else if (this.options.isInvTrigMode) {
+          const pi = Math.PI;
+          const trigTargets = [-pi, -3*pi/4, -2*pi/3, -pi/2, -pi/3, -pi/4, -pi/6, 0, pi/6, pi/4, pi/3, pi/2, 2*pi/3, 3*pi/4, pi];
+          for (const target of trigTargets) {
+            const [, targetPy] = this.mathToScreen(0, target);
+            if (Math.abs(mouseY - targetPy) < 12) {
+              this.cursorMathY = target;
+              break;
+            }
+          }
+        }
 
         if (this.onInspectorMove) {
           this.onInspectorMove(this.cursorMathX, this.cursorMathY);
@@ -184,7 +276,6 @@
           this.isDragging = false;
           this.prevPinchDist = null;
         } else if (this.pointerCache.size === 1) {
-          // Возврат к панорамированию
           const remaining = Array.from(this.pointerCache.values())[0];
           this.isDragging = true;
           this.dragStartX = remaining.x - this.originX;
@@ -214,7 +305,7 @@
         this.render();
       }, { passive: false });
 
-      // Двойной клик/тап: сброс масштаба и центрирование
+      // Двойной клик/тап: сброс масштаба
       let lastTapTime = 0;
       el.addEventListener('click', (e) => {
         const currentTime = new Date().getTime();
@@ -248,7 +339,6 @@
       const [mathX, mathY] = this.screenToMath(screenX, screenY);
       this.scale = newScale;
 
-      // Корректируем смещение так, чтобы точка под курсором осталась на месте
       this.originX = screenX - mathX * this.scale;
       this.originY = screenY + mathY * this.scale;
     }
@@ -256,7 +346,7 @@
     resetView() {
       this.scale = this.options.defaultScale;
       this.originX = this.width / 2;
-      this.originY = this.height / 2;
+      this.originY = this.height * (this.originYRatio ?? 0.5);
       this.render();
     }
 
@@ -297,19 +387,17 @@
       };
     }
 
-    setTrigMode(isTrig) {
+    setTrigMode(isTrig, isInvTrig = false) {
       this.options.isTrigMode = Boolean(isTrig);
+      this.options.isInvTrigMode = Boolean(isInvTrig);
       this.render();
     }
 
-    /**
-     * Основной цикл отрисовки Canvas
-     */
     render() {
       if (!this.width || !this.height) return;
       const ctx = this.ctx;
 
-      // 1. Очистка и заливка фона бумажной миллиметровки
+      // 1. Фон
       ctx.fillStyle = this.colors.bg;
       ctx.fillRect(0, 0, this.width, this.height);
 
@@ -318,50 +406,45 @@
         this.drawGrid();
       }
 
-      // 3. Координатные оси
+      // 3. Оси
       if (this.options.showAxes) {
         this.drawAxes();
       }
 
-      // 4. Отрисовка асимптот для всех слоев
+      // 4. Асимптоты
       if (this.options.showAsymptotes) {
         this.drawAsymptotes();
       }
 
-      // 5. Вектор смещения
+      // 5. Вектор сдвига
       if (this.displacementVector) {
         this.drawVector();
       }
 
-      // 6. Отрисовка графиков функций
+      // 6. Слои графиков
       this.layers.forEach(layer => {
         this.drawFunctionLayer(layer);
       });
 
-      // 7. Опорные характерные точки
+      // 7. Опорные точки
       if (this.options.showKeyPoints) {
         this.drawKeyPoints();
       }
 
-      // 8. Инспектор координат
+      // 8. Перекрестие
       if (this.options.showCrosshair && this.cursorMathX !== null) {
         this.drawCrosshair();
       }
     }
 
-    /**
-     * Алгоритм Nice Numbers для адаптивного шага координатной сетки
-     */
-    calculateGridStep() {
+    calculateGridStepX() {
       if (this.options.isTrigMode) {
-        // В тригонометрическом режиме шаги кратны pi
-        if (this.scale > 80) return Math.PI / 4; // pi/4
-        if (this.scale > 35) return Math.PI / 2; // pi/2
-        if (this.scale > 15) return Math.PI;     // pi
-        return 2 * Math.PI;                      // 2pi
+        if (this.scale > 80) return Math.PI / 4;
+        if (this.scale > 35) return Math.PI / 2;
+        if (this.scale > 15) return Math.PI;
+        return 2 * Math.PI;
       }
 
-      // Минимальное расстояние между линиями в пикселях: ~50-80px
       const minPixelStep = 60;
       const rawStep = minPixelStep / this.scale;
       const power = Math.floor(Math.log10(rawStep));
@@ -375,74 +458,95 @@
       return niceFraction * Math.pow(10, power);
     }
 
-    /**
-     * Отрисовка адаптивной миллиметровки
-     */
+    calculateGridStepY() {
+      if (this.options.isInvTrigMode) {
+        if (this.scale > 80) return Math.PI / 4;
+        if (this.scale > 35) return Math.PI / 2;
+        return Math.PI;
+      }
+
+      const minPixelStep = 60;
+      const rawStep = minPixelStep / this.scale;
+      const power = Math.floor(Math.log10(rawStep));
+      const fraction = rawStep / Math.pow(10, power);
+
+      let niceFraction = 1;
+      if (fraction > 5) niceFraction = 10;
+      else if (fraction > 2) niceFraction = 5;
+      else if (fraction > 1) niceFraction = 2;
+
+      return niceFraction * Math.pow(10, power);
+    }
+
     drawGrid() {
       const ctx = this.ctx;
-      const step = this.calculateGridStep();
-      const pixelStep = step * this.scale;
+      const stepX = this.calculateGridStepX();
+      const stepY = this.calculateGridStepY();
+      const pixelStepX = stepX * this.scale;
+      const pixelStepY = stepY * this.scale;
 
       const [minX, maxY] = this.screenToMath(0, 0);
       const [maxX, minY] = this.screenToMath(this.width, this.height);
 
-      // А) Мелкая сетка (миллиметровка: 1/5 от основного шага)
-      if (pixelStep >= 40) {
-        const subStep = step / 5;
-        ctx.beginPath();
-        ctx.strokeStyle = this.colors.paperGridSub;
-        ctx.lineWidth = 0.5;
+      // Мелкая сетка
+      ctx.beginPath();
+      ctx.strokeStyle = this.colors.paperGridSub;
+      ctx.lineWidth = 0.5;
 
-        const startSubX = Math.floor(minX / subStep) * subStep;
-        for (let x = startSubX; x <= maxX; x += subStep) {
+      if (pixelStepX >= 40) {
+        const subStepX = stepX / (this.options.isTrigMode ? 2 : 5);
+        const startSubX = Math.floor(minX / subStepX) * subStepX;
+        for (let x = startSubX; x <= maxX; x += subStepX) {
           const [sx] = this.mathToScreen(x, 0);
           ctx.moveTo(Math.round(sx) + 0.5, 0);
           ctx.lineTo(Math.round(sx) + 0.5, this.height);
         }
+      }
 
-        const startSubY = Math.floor(minY / subStep) * subStep;
-        for (let y = startSubY; y <= maxY; y += subStep) {
+      if (pixelStepY >= 40) {
+        const subStepY = stepY / (this.options.isInvTrigMode ? 2 : 5);
+        const startSubY = Math.floor(minY / subStepY) * subStepY;
+        for (let y = startSubY; y <= maxY; y += subStepY) {
           const [, sy] = this.mathToScreen(0, y);
           ctx.moveTo(0, Math.round(sy) + 0.5);
           ctx.lineTo(this.width, Math.round(sy) + 0.5);
         }
-        ctx.stroke();
       }
+      ctx.stroke();
 
-      // Б) Основная сетка
+      // Основная сетка
       ctx.beginPath();
       ctx.strokeStyle = this.colors.paperGridMain;
       ctx.lineWidth = 1;
 
-      const startX = Math.floor(minX / step) * step;
-      for (let x = startX; x <= maxX; x += step) {
+      const startX = Math.floor(minX / stepX) * stepX;
+      for (let x = startX; x <= maxX; x += stepX) {
         const [sx] = this.mathToScreen(x, 0);
         ctx.moveTo(Math.round(sx) + 0.5, 0);
         ctx.lineTo(Math.round(sx) + 0.5, this.height);
       }
 
-      const startY = Math.floor(minY / step) * step;
-      for (let y = startY; y <= maxY; y += step) {
+      const startY = Math.floor(minY / stepY) * stepY;
+      for (let y = startY; y <= maxY; y += stepY) {
         const [, sy] = this.mathToScreen(0, y);
         ctx.moveTo(0, Math.round(sy) + 0.5);
         ctx.lineTo(this.width, Math.round(sy) + 0.5);
       }
       ctx.stroke();
 
-      // В) Числовые метки на сетке
+      // Метки делений
       if (this.options.showLabels) {
         ctx.font = '11px "Fira Code", monospace, sans-serif';
         ctx.fillStyle = this.colors.axisText;
 
-        // Фиксация меток у края экрана, если ось ушла за экран
         const clampedAxisY = Math.max(16, Math.min(this.height - 6, this.originY));
         const clampedAxisX = Math.max(24, Math.min(this.width - 20, this.originX));
 
         ctx.textAlign = 'center';
         ctx.textBaseline = 'top';
 
-        for (let x = startX; x <= maxX; x += step) {
-          if (Math.abs(x) < step * 0.01) continue; // 0 рисуется отдельно
+        for (let x = startX; x <= maxX; x += stepX) {
+          if (Math.abs(x) < stepX * 0.01) continue;
           const [sx] = this.mathToScreen(x, 0);
           const label = this.formatAxisLabel(x, true);
           ctx.fillText(label, sx, clampedAxisY + 4);
@@ -451,14 +555,13 @@
         ctx.textAlign = 'right';
         ctx.textBaseline = 'middle';
 
-        for (let y = startY; y <= maxY; y += step) {
-          if (Math.abs(y) < step * 0.01) continue;
+        for (let y = startY; y <= maxY; y += stepY) {
+          if (Math.abs(y) < stepY * 0.01) continue;
           const [, sy] = this.mathToScreen(0, y);
           const label = this.formatAxisLabel(y, false);
           ctx.fillText(label, clampedAxisX - 6, sy);
         }
 
-        // Подпись начала координат (0)
         ctx.textAlign = 'right';
         ctx.textBaseline = 'top';
         ctx.fillText('0', clampedAxisX - 4, clampedAxisY + 4);
@@ -467,17 +570,10 @@
 
     formatAxisLabel(val, isX) {
       if (this.options.isTrigMode && isX) {
-        const piRatio = val / Math.PI;
-        if (Math.abs(piRatio - 1) < 0.01) return 'π';
-        if (Math.abs(piRatio + 1) < 0.01) return '-π';
-        if (Math.abs(piRatio - 2) < 0.01) return '2π';
-        if (Math.abs(piRatio + 2) < 0.01) return '-2π';
-        if (Math.abs(piRatio - 0.5) < 0.01) return 'π/2';
-        if (Math.abs(piRatio + 0.5) < 0.01) return '-π/2';
-        if (Math.abs(piRatio - 1.5) < 0.01) return '3π/2';
-        if (Math.abs(piRatio + 1.5) < 0.01) return '-3π/2';
-        if (Math.abs(piRatio - 0.25) < 0.01) return 'π/4';
-        if (Math.abs(piRatio + 0.25) < 0.01) return '-π/4';
+        return formatPiValue(val);
+      }
+      if (this.options.isInvTrigMode && !isX) {
+        return formatPiValue(val);
       }
 
       if (Math.abs(val) >= 10000 || (Math.abs(val) < 0.01 && val !== 0)) {
@@ -487,43 +583,35 @@
       return Number(val.toFixed(2)).toString().replace('.', ',');
     }
 
-    /**
-     * Отрисовка главных координатных осей Ox и Oy
-     */
     drawAxes() {
       const ctx = this.ctx;
       ctx.strokeStyle = this.colors.axis;
       ctx.lineWidth = 1.75;
       ctx.beginPath();
 
-      // Ось Ox
       const hasOx = this.originY >= 0 && this.originY <= this.height;
       if (hasOx) {
         const y = Math.round(this.originY) + 0.5;
         ctx.moveTo(0, y);
         ctx.lineTo(this.width, y);
 
-        // Стрелка Ox
         ctx.moveTo(this.width - 10, y - 4);
         ctx.lineTo(this.width, y);
         ctx.lineTo(this.width - 10, y + 4);
       }
 
-      // Ось Oy
       const hasOy = this.originX >= 0 && this.originX <= this.width;
       if (hasOy) {
         const x = Math.round(this.originX) + 0.5;
         ctx.moveTo(x, this.height);
         ctx.lineTo(x, 0);
 
-        // Стрелка Oy
         ctx.moveTo(x - 4, 10);
         ctx.lineTo(x, 0);
         ctx.lineTo(x + 4, 10);
       }
       ctx.stroke();
 
-      // Подписи осей "x" и "y"
       ctx.font = 'bold 13px "Fira Sans", sans-serif';
       ctx.fillStyle = this.colors.axis;
       if (hasOx) {
@@ -538,9 +626,6 @@
       }
     }
 
-    /**
-     * Отрисовка асимптот
-     */
     drawAsymptotes() {
       const ctx = this.ctx;
       const allAsymptotes = [];
@@ -565,7 +650,6 @@
             ctx.lineTo(Math.round(sx) + 0.5, this.height);
             ctx.stroke();
 
-            // Бейдж асимптоты
             if (asymp.label) {
               this.drawAsymptoteBadge(asymp.label, sx + 4, 22);
             }
@@ -578,7 +662,7 @@
             ctx.stroke();
 
             if (asymp.label) {
-              this.drawAsymptoteBadge(asymp.label, this.width - 55, sy - 8);
+              this.drawAsymptoteBadge(asymp.label, this.width - 65, sy - 8);
             }
           }
         }
@@ -609,9 +693,6 @@
       ctx.restore();
     }
 
-    /**
-     * Отрисовка векторной стрелки сдвига
-     */
     drawVector() {
       const v = this.displacementVector;
       if (!v) return;
@@ -620,7 +701,7 @@
       const [x2, y2] = this.mathToScreen(v.to[0], v.to[1]);
 
       const dist = Math.hypot(x2 - x1, y2 - y1);
-      if (dist < 4) return; // Слишком малое смещение
+      if (dist < 4) return;
 
       const ctx = this.ctx;
       ctx.save();
@@ -628,13 +709,11 @@
       ctx.fillStyle = this.colors.vector;
       ctx.lineWidth = 2;
 
-      // Линия вектора
       ctx.beginPath();
       ctx.moveTo(x1, y1);
       ctx.lineTo(x2, y2);
       ctx.stroke();
 
-      // Наконечник стрелки
       const angle = Math.atan2(y2 - y1, x2 - x1);
       const headLen = 9;
       ctx.beginPath();
@@ -644,7 +723,6 @@
       ctx.closePath();
       ctx.fill();
 
-      // Подпись вектора
       if (v.label) {
         ctx.font = 'bold 11px "Fira Sans", sans-serif';
         const midX = (x1 + x2) / 2;
@@ -654,9 +732,6 @@
       ctx.restore();
     }
 
-    /**
-     * Отрисовка одного слоя графика функции с защитой от разрывов
-     */
     drawFunctionLayer(layer) {
       const ctx = this.ctx;
       const fn = layer.fn;
@@ -664,7 +739,6 @@
 
       ctx.save();
 
-      // Настройка стиля
       if (layer.style === 'ghost') {
         ctx.strokeStyle = this.colors.ghost;
         ctx.lineWidth = 1.75;
@@ -674,7 +748,6 @@
         ctx.lineWidth = 2.5;
         ctx.setLineDash([]);
       } else {
-        // active / primary
         ctx.strokeStyle = layer.color || this.colors.primary;
         ctx.lineWidth = 2.5;
         ctx.setLineDash([]);
@@ -682,13 +755,12 @@
 
       ctx.beginPath();
 
-      // Шаг сэмплирования по пикселям экрана (1px для максимальной гладкости)
       const pixelStep = 1;
       let inPath = false;
       let prevScreenY = null;
       let prevMathY = null;
 
-      const jumpThreshold = this.height * 1.5; // порог разрыва (асимптоты)
+      const jumpThreshold = this.height * 1.5;
 
       for (let px = 0; px <= this.width; px += pixelStep) {
         const [mathX] = this.screenToMath(px, 0);
@@ -700,7 +772,6 @@
           mathY = NaN;
         }
 
-        // Проверка области определения
         if (isNaN(mathY) || !isFinite(mathY)) {
           if (inPath) {
             ctx.stroke();
@@ -714,11 +785,9 @@
 
         const [, screenY] = this.mathToScreen(mathX, mathY);
 
-        // Проверка разрыва непрерывности (смена знака при огромном скачке)
         let isDiscontinuous = false;
         if (prevScreenY !== null && prevMathY !== null) {
           const dy = Math.abs(screenY - prevScreenY);
-          // Разрыв происходит, когда значение скачет через бесконечность
           if (dy > jumpThreshold && (prevMathY * mathY < 0 || Math.abs(mathY) > 50)) {
             isDiscontinuous = true;
           }
@@ -749,9 +818,6 @@
       ctx.restore();
     }
 
-    /**
-     * Отрисовка характерных опорных точек
-     */
     drawKeyPoints() {
       const ctx = this.ctx;
       this.layers.forEach(layer => {
@@ -767,7 +833,6 @@
           if (sx < -20 || sx > this.width + 20 || sy < -20 || sy > this.height + 20) return;
 
           ctx.save();
-          // Внешний контур
           ctx.fillStyle = '#FFFFFF';
           ctx.strokeStyle = ptColor;
           ctx.lineWidth = 2.5;
@@ -777,13 +842,11 @@
           ctx.fill();
           ctx.stroke();
 
-          // Подпись точки
           if (!isGhost && pt.label) {
             ctx.font = 'bold 11px "Fira Code", monospace';
             const label = pt.label;
             const textWidth = ctx.measureText(label).width;
 
-            // Плашка под текст
             const tagX = sx + 8;
             const tagY = sy - 10;
             ctx.fillStyle = 'rgba(255, 255, 255, 0.9)';
@@ -805,9 +868,6 @@
       });
     }
 
-    /**
-     * Отрисовка перекрестия инспектора и координат
-     */
     drawCrosshair() {
       const ctx = this.ctx;
       const x = this.cursorMathX;
@@ -819,7 +879,6 @@
       ctx.lineWidth = 1;
       ctx.setLineDash([3, 3]);
 
-      // Вертикальная и горизонтальная направляющие
       ctx.beginPath();
       ctx.moveTo(sx, 0);
       ctx.lineTo(sx, this.height);
@@ -827,14 +886,16 @@
       ctx.lineTo(this.width, sy);
       ctx.stroke();
 
-      // Точка под курсором
       ctx.fillStyle = this.colors.primary;
       ctx.beginPath();
       ctx.arc(sx, sy, 3, 0, Math.PI * 2);
       ctx.fill();
 
-      // Плашка текущих координат
-      const coordText = `(${Number(x.toFixed(2)).toString().replace('.', ',')}; ${Number(y.toFixed(2)).toString().replace('.', ',')})`;
+      // Форматируем координаты с учетом Pi
+      const xFormatted = this.options.isTrigMode ? formatPiValue(x) : Number(x.toFixed(2)).toString().replace('.', ',');
+      const yFormatted = this.options.isInvTrigMode ? formatPiValue(y) : Number(y.toFixed(2)).toString().replace('.', ',');
+      const coordText = `(${xFormatted}; ${yFormatted})`;
+
       ctx.font = '11px "Fira Code", monospace';
       const textWidth = ctx.measureText(coordText).width;
 
@@ -855,6 +916,9 @@
       ctx.restore();
     }
   }
+
+  // Экспортируем функцию форматирования Pi для других модулей
+  CartesianCanvas.formatPiValue = formatPiValue;
 
   return CartesianCanvas;
 }));

@@ -8,7 +8,8 @@
  * - Отображение начального графика (призрак) и итогового
  * - Стрелка вектора смещения
  * - Шаговый разбор преобразований
- * - Полная адаптивность и тач-управление на мобильных
+ * - Отображение углов в долях π для тригонометрии
+ * - Авто-позиционирование по высоте под форму графика (корыто, парабола и т.д.)
  */
 
 (function (root, factory) {
@@ -22,7 +23,6 @@
   let canvasInstance = null;
   let currentBaseFn = null;
 
-  // Текущие параметры преобразований
   let state = {
     fnId: 'parabola',
     a: 0,
@@ -40,10 +40,9 @@
   };
 
   function init(canvasElement, controlsContainer) {
-    // 1. Инициализация Canvas
     canvasInstance = new window.MathCanvas(canvasElement, {
       isInteractive: true,
-      defaultScale: 42,
+      defaultScale: 40,
       showGrid: true,
       showAxes: true,
       showLabels: true,
@@ -52,40 +51,55 @@
       showCrosshair: true
     });
 
-    // Инспектор координат
+    // Инспектор координат с поддержкой долей π
     canvasInstance.onInspectorMove = (mathX, mathY) => {
       const coordDisplay = document.getElementById('inspector-display');
       if (!coordDisplay) return;
 
       if (mathX === null) {
-        coordDisplay.innerHTML = 'Наведите курсор или палец на график для инспекции координат';
+        coordDisplay.innerHTML = 'Наведите курсор или проведите пальцем по графику для инспекции координат (x, y)';
         return;
       }
 
-      const xStr = formatNum(mathX);
+      const isTrig = currentBaseFn && Boolean(currentBaseFn.isTrig);
+      const isInvTrig = currentBaseFn && Boolean(currentBaseFn.isInvTrig);
+      const formatPi = window.MathCanvas.formatPiValue;
+
+      const xStr = isTrig ? formatPi(mathX) : formatNum(mathX);
+
       const curY = currentBaseFn ? window.TransformCore.evaluateTransformed(mathX, currentBaseFn.fn, state) : NaN;
       const origY = currentBaseFn ? currentBaseFn.fn(mathX) : NaN;
 
+      const curYStr = isInvTrig && !isNaN(curY) ? formatPi(curY) : formatNum(curY);
+      const origYStr = isInvTrig && !isNaN(origY) ? formatPi(origY) : formatNum(origY);
+
       let html = `<span class="inspector-badge">x = <b>${xStr}</b></span> `;
       if (!isNaN(curY) && isFinite(curY)) {
-        html += `<span class="inspector-badge active-badge">g(x) = <b>${formatNum(curY)}</b></span> `;
+        html += `<span class="inspector-badge active-badge">g(x) = <b>${curYStr}</b></span> `;
       }
       if (state.showGhost && !isNaN(origY) && isFinite(origY)) {
-        html += `<span class="inspector-badge ghost-badge">f(x)₀ = <b>${formatNum(origY)}</b></span>`;
+        html += `<span class="inspector-badge ghost-badge">f(x)₀ = <b>${origYStr}</b></span>`;
       }
       coordDisplay.innerHTML = html;
     };
 
-    // 2. Рендеринг контролов
     renderControls(controlsContainer);
-
-    // 3. Установка функции по умолчанию
     setBaseFunction(state.fnId);
   }
 
   function formatNum(n) {
     if (Math.abs(n) < 1e-4) return '0';
     return Number(n.toFixed(2)).toString().replace('.', ',');
+  }
+
+  function formatParamValue(param, val) {
+    if (param === 'a' && currentBaseFn && currentBaseFn.isTrig && window.MathCanvas?.formatPiValue) {
+      return window.MathCanvas.formatPiValue(val);
+    }
+    if (param === 'b' && currentBaseFn && currentBaseFn.isInvTrig && window.MathCanvas?.formatPiValue) {
+      return window.MathCanvas.formatPiValue(val);
+    }
+    return Number(val.toFixed(2)).toString().replace('.', ',');
   }
 
   function setBaseFunction(fnId) {
@@ -95,14 +109,26 @@
     currentBaseFn = fnInfo;
     state.fnId = fnId;
 
-    // Переключение режима сетки (для тригонометрии — сетка в долях pi)
-    canvasInstance.setTrigMode(Boolean(fnInfo.isTrig));
+    // Автонастройка оптимальной вертикальной оси и масштаба
+    const yRatio = fnInfo.originYRatio ?? 0.5;
+    const targetScale = fnInfo.defaultScale ?? 40;
+    canvasInstance.setOriginYRatio(yRatio, targetScale);
+    canvasInstance.setTrigMode(Boolean(fnInfo.isTrig), Boolean(fnInfo.isInvTrig));
 
-    // Обновляем селектор в UI
     const selectEl = document.getElementById('pg-func-select');
     if (selectEl && selectEl.value !== fnId) {
       selectEl.value = fnId;
     }
+
+    const chipsA = document.getElementById('trig-chips-a');
+    if (chipsA) chipsA.style.display = fnInfo.isTrig ? 'flex' : 'none';
+    const chipsB = document.getElementById('trig-chips-b');
+    if (chipsB) chipsB.style.display = fnInfo.isInvTrig ? 'flex' : 'none';
+
+    ['a', 'b', 'k', 'm'].forEach(p => {
+      const valDisplay = document.getElementById(`val-${p}`);
+      if (valDisplay) valDisplay.textContent = formatParamValue(p, state[p]);
+    });
 
     updateView();
   }
@@ -145,7 +171,7 @@
       keyPoints: transformedPoints
     });
 
-    // 4. Вектор сдвига со стрелкой (если есть смещение a или b)
+    // 4. Вектор сдвига со стрелкой
     if (state.showVector && (state.a !== 0 || state.b !== 0)) {
       const origAnchor = currentBaseFn.keyPoints[0] || { x: 0, y: 0 };
       const newAnchor = window.TransformCore.transformKeyPoint(origAnchor, state) || { x: state.a, y: state.b };
@@ -159,8 +185,6 @@
     }
 
     canvasInstance.render();
-
-    // 5. Обновление формулы и описания шагов в панели
     updateFormulaCard();
   }
 
@@ -171,7 +195,6 @@
 
     if (!formulaEl || !currentBaseFn) return;
 
-    // Результирующая формула
     const latexStr = window.TransformCore.buildFormulaString(currentBaseFn, state);
     if (window.renderMath) {
       window.renderMath(latexStr, formulaEl);
@@ -179,7 +202,6 @@
       formulaEl.textContent = latexStr;
     }
 
-    // Информация об исходной функции
     if (baseInfoEl) {
       baseInfoEl.innerHTML = `
         <div class="base-meta-row">
@@ -191,7 +213,6 @@
       if (window.renderAllMathIn) window.renderAllMathIn(baseInfoEl);
     }
 
-    // Список шагов
     if (stepsEl) {
       const steps = window.TransformCore.getActiveStepsList(state);
       stepsEl.innerHTML = steps.map((s, idx) => `
@@ -261,6 +282,16 @@
               <button class="btn-step" data-stepper="a" data-dir="1" title="Увеличить">+</button>
             </div>
             <div class="slider-hint">a > 0: сдвиг вправо; a < 0: сдвиг влево</div>
+            <div class="trig-step-chips" id="trig-chips-a" style="${currentBaseFn && currentBaseFn.isTrig ? 'display:flex;' : 'display:none;'}">
+              <span class="chip-label">Быстрый сдвиг по π:</span>
+              <button type="button" class="btn-chip" data-trig-a="-3.14159265">-π</button>
+              <button type="button" class="btn-chip" data-trig-a="-1.5707963">-π/2</button>
+              <button type="button" class="btn-chip" data-trig-a="-0.785398">-π/4</button>
+              <button type="button" class="btn-chip" data-trig-a="0">0</button>
+              <button type="button" class="btn-chip" data-trig-a="0.785398">+π/4</button>
+              <button type="button" class="btn-chip" data-trig-a="1.5707963">+π/2</button>
+              <button type="button" class="btn-chip" data-trig-a="3.14159265">+π</button>
+            </div>
           </div>
 
           <!-- Сдвиг Oy (b) -->
@@ -275,6 +306,13 @@
               <button class="btn-step" data-stepper="b" data-dir="1" title="Увеличить">+</button>
             </div>
             <div class="slider-hint">b > 0: вверх; b < 0: вниз</div>
+            <div class="trig-step-chips" id="trig-chips-b" style="${currentBaseFn && currentBaseFn.isInvTrig ? 'display:flex;' : 'display:none;'}">
+              <span class="chip-label">Быстрый сдвиг по π:</span>
+              <button type="button" class="btn-chip" data-trig-b="-1.5707963">-π/2</button>
+              <button type="button" class="btn-chip" data-trig-b="0">0</button>
+              <button type="button" class="btn-chip" data-trig-b="1.5707963">+π/2</button>
+              <button type="button" class="btn-chip" data-trig-b="3.14159265">+π</button>
+            </div>
           </div>
 
           <!-- Растяжение/сжатие Oy (k) -->
@@ -288,7 +326,7 @@
               <input type="range" id="slider-k" min="-4" max="4" step="0.25" value="${state.k}" class="custom-slider">
               <button class="btn-step" data-stepper="k" data-dir="0.5" title="Увеличить">+</button>
             </div>
-            <div class="slider-hint">|k| > 1: растяжение; |k| < 1: сжатие к Ox; k < 0: переворот</div>
+            <div class="slider-hint">|k| > 1: растяжение от Ox; |k| < 1: сжатие; k < 0: переворот</div>
           </div>
 
           <!-- Сжатие/растяжение Ox (m) -->
@@ -302,7 +340,7 @@
               <input type="range" id="slider-m" min="-3" max="3" step="0.5" value="${state.m}" class="custom-slider">
               <button class="btn-step" data-stepper="m" data-dir="0.5" title="Увеличить">+</button>
             </div>
-            <div class="slider-hint">|m| > 1: сжатие к Oy; |m| < 1: растяжение от Oy</div>
+            <div class="slider-hint">|m| > 1: сжатие к Oy в m раз; |m| < 1: растяжение от Oy</div>
           </div>
         </div>
 
@@ -352,7 +390,7 @@
           </div>
         </div>
 
-        <!-- Кнопки сброса -->
+        <!-- Кнопки действий -->
         <div class="action-buttons-row">
           <button class="btn btn-secondary" id="btn-reset-view">Центрировать холст</button>
           <button class="btn btn-primary" id="btn-reset-params">Сбросить параметры (f(x))</button>
@@ -364,13 +402,11 @@
   }
 
   function bindControlEvents() {
-    // Выбор функции
     const sel = document.getElementById('pg-func-select');
     if (sel) {
       sel.addEventListener('change', (e) => setBaseFunction(e.target.value));
     }
 
-    // Слайдеры и счетчики
     ['a', 'b', 'k', 'm'].forEach(param => {
       const slider = document.getElementById(`slider-${param}`);
       const valDisplay = document.getElementById(`val-${param}`);
@@ -378,16 +414,14 @@
       if (slider) {
         slider.addEventListener('input', (e) => {
           let val = parseFloat(e.target.value);
-          // Защита от m = 0
           if (param === 'm' && val === 0) val = 0.5;
           state[param] = val;
-          if (valDisplay) valDisplay.textContent = val;
+          if (valDisplay) valDisplay.textContent = formatParamValue(param, val);
           updateView();
         });
       }
     });
 
-    // Кнопки + / - возле слайдеров
     document.querySelectorAll('.btn-step').forEach(btn => {
       btn.addEventListener('click', (e) => {
         const param = e.target.dataset.stepper;
@@ -400,12 +434,36 @@
         const slider = document.getElementById(`slider-${param}`);
         const valDisplay = document.getElementById(`val-${param}`);
         if (slider) slider.value = next;
-        if (valDisplay) valDisplay.textContent = next;
+        if (valDisplay) valDisplay.textContent = formatParamValue(param, next);
         updateView();
       });
     });
 
-    // Чекбоксы модулей и симметрий
+    // Быстрые кнопки сдвигов по π
+    document.querySelectorAll('[data-trig-a]').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        const val = parseFloat(e.currentTarget.dataset.trigA);
+        state.a = val;
+        const slider = document.getElementById('slider-a');
+        const valDisplay = document.getElementById('val-a');
+        if (slider) slider.value = Math.min(5, Math.max(-5, val));
+        if (valDisplay) valDisplay.textContent = formatParamValue('a', val);
+        updateView();
+      });
+    });
+
+    document.querySelectorAll('[data-trig-b]').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        const val = parseFloat(e.currentTarget.dataset.trigB);
+        state.b = val;
+        const slider = document.getElementById('slider-b');
+        const valDisplay = document.getElementById('val-b');
+        if (slider) slider.value = Math.min(5, Math.max(-5, val));
+        if (valDisplay) valDisplay.textContent = formatParamValue('b', val);
+        updateView();
+      });
+    });
+
     const bindToggle = (id, key) => {
       const el = document.getElementById(id);
       if (el) {
@@ -426,7 +484,6 @@
     bindToggle('chk-asymptotes', 'showAsymptotes');
     bindToggle('chk-points', 'showKeyPoints');
 
-    // Кнопки действий
     const btnResetView = document.getElementById('btn-reset-view');
     if (btnResetView) {
       btnResetView.addEventListener('click', () => canvasInstance?.resetView());
@@ -437,7 +494,6 @@
       btnResetParams.addEventListener('click', () => applyPreset('reset'));
     }
 
-    // Пресеты
     document.querySelectorAll('.btn-preset').forEach(btn => {
       btn.addEventListener('click', (e) => {
         applyPreset(e.target.dataset.preset);
@@ -474,12 +530,11 @@
       state.absOuter = true;
     }
 
-    // Синхронизация слайдеров
     ['a', 'b', 'k', 'm'].forEach(p => {
       const slider = document.getElementById(`slider-${p}`);
       const valDisplay = document.getElementById(`val-${p}`);
       if (slider) slider.value = state[p];
-      if (valDisplay) valDisplay.textContent = state[p];
+      if (valDisplay) valDisplay.textContent = formatParamValue(p, state[p]);
     });
 
     const setChecked = (id, val) => {

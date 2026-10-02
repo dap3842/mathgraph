@@ -2,7 +2,8 @@
  * catalog.js
  * Каталог базовых графиков функций для зачета («Список графиков»).
  * Отображает карточки со всеми функциями, их свойствами, формулами KaTeX
- * и автономными мини-холстами на светлой миллиметровке.
+ * и интерактивными мини-холстами на светлой миллиметровке с возможностью
+ * зума (+ / -) и перемещения (pan).
  */
 
 (function (root, factory) {
@@ -16,7 +17,7 @@
   let containerEl = null;
   let activeCategory = 'all';
   let searchQuery = '';
-  const miniCanvases = [];
+  const miniCanvasesMap = new Map();
 
   function init(targetContainer) {
     containerEl = targetContainer;
@@ -87,8 +88,7 @@
     const grid = document.getElementById('catalog-grid');
     if (!grid) return;
 
-    // Очищаем старые мини-холсты
-    miniCanvases.length = 0;
+    miniCanvasesMap.clear();
 
     let list = window.MathCore.getFunctionsByCategory(activeCategory);
 
@@ -121,6 +121,13 @@
         <div class="card-canvas-wrapper">
           <canvas id="mini-canvas-${fn.id}" class="mini-canvas" width="340" height="220"></canvas>
           <span class="card-category-tag">${fn.categoryName}</span>
+          
+          <!-- Интерактивные кнопки масштаба и сброса прямо на карточке -->
+          <div class="card-canvas-controls">
+            <button class="btn-canvas-ctrl btn-zoom-in" data-card-fn="${fn.id}" title="Приблизить">+</button>
+            <button class="btn-canvas-ctrl btn-zoom-out" data-card-fn="${fn.id}" title="Отдалить">−</button>
+            <button class="btn-canvas-ctrl btn-zoom-reset" data-card-fn="${fn.id}" title="Сбросить масштаб">⟲</button>
+          </div>
         </div>
 
         <div class="card-content">
@@ -185,9 +192,27 @@
       window.renderAllMathIn(grid);
     }
 
-    // Инициализация мини-холстов
+    // Инициализация интерактивных мини-холстов
     list.forEach(fn => {
       initMiniCanvas(fn);
+    });
+
+    // Привязка кнопок зума на мини-холстах
+    grid.querySelectorAll('.btn-canvas-ctrl').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const fnId = btn.dataset.cardFn;
+        const mini = miniCanvasesMap.get(fnId);
+        if (!mini) return;
+
+        if (btn.classList.contains('btn-zoom-in')) {
+          mini.setZoom(mini.scale * 1.25);
+        } else if (btn.classList.contains('btn-zoom-out')) {
+          mini.setZoom(mini.scale * 0.8);
+        } else if (btn.classList.contains('btn-zoom-reset')) {
+          mini.resetView();
+        }
+      });
     });
 
     // Обработка клика «Исследовать в лаборатории»
@@ -205,16 +230,19 @@
     const canvasEl = document.getElementById(`mini-canvas-${fn.id}`);
     if (!canvasEl) return;
 
+    // Интерактивный мини-холст с поддержкой жестов!
     const mini = new window.MathCanvas(canvasEl, {
-      isInteractive: false,
-      defaultScale: fn.isTrig ? 24 : 28,
+      isInteractive: true,
+      defaultScale: fn.defaultScale ? Math.round(fn.defaultScale * 0.75) : (fn.isTrig ? 24 : 28),
+      originYRatio: fn.originYRatio ?? 0.5,
       showGrid: true,
       showAxes: true,
       showLabels: true,
       showAsymptotes: true,
       showKeyPoints: true,
-      showCrosshair: false,
-      isTrigMode: Boolean(fn.isTrig)
+      showCrosshair: true,
+      isTrigMode: Boolean(fn.isTrig),
+      isInvTrigMode: Boolean(fn.isInvTrig)
     });
 
     mini.addLayer({
@@ -228,7 +256,7 @@
     });
 
     mini.render();
-    miniCanvases.push(mini);
+    miniCanvasesMap.set(fn.id, mini);
   }
 
   return {

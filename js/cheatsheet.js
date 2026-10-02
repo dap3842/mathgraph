@@ -2,7 +2,7 @@
  * cheatsheet.js
  * Шпаргалка для быстрой подготовки к зачёту по графикам функций и преобразованиям.
  * Структурирована для максимальной скорости повторения:
- * - Сводная таблица функций (D(f), E(f), опорные точки, асимптоты)
+ * - Сводная таблица функций (D(f), E(f), краткое описание для зачета, опорные точки, асимптоты)
  * - Сводная матрица преобразований (формула -> изменение координат)
  * - Пошаговый порядок построения сложных функций
  * - Кнопка печати / сохранения в PDF (window.print())
@@ -30,7 +30,7 @@
       <div class="cheat-header-bar">
         <div>
           <h2>Экспресс-шпаргалка к зачёту</h2>
-          <p class="cheat-subtitle">Всё самое главное для быстрой сдачи зачёта по графикам и преобразованиям</p>
+          <p class="cheat-subtitle">Краткая сводка: графики, их краткие описания и правила преобразований для сдачи зачета</p>
         </div>
         <button class="btn btn-primary btn-print" id="btn-print-cheatsheet">
           <svg viewBox="0 0 24 24" width="18" height="18" stroke="currentColor" fill="none" stroke-width="2"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
@@ -38,10 +38,50 @@
         </button>
       </div>
 
-      <!-- БЛОК 1: ТАБЛИЦА ВСЕХ ПРЕОБРАЗОВАНИЙ -->
+      <!-- БЛОК 1: ПАСПОРТ БАЗОВЫХ ГРАФИКОВ С КРАТКИМ ОПИСАНИЕМ -->
       <section class="cheat-section">
         <h3 class="section-title">
           <span class="section-badge">Часть 1</span>
+          Сводная таблица базовых графиков к зачёту
+        </h3>
+        <div class="table-responsive">
+          <table class="cheat-table">
+            <thead>
+              <tr>
+                <th style="min-width: 140px;">Функция</th>
+                <th style="min-width: 220px;">Краткое описание графика</th>
+                <th>Область D(f)</th>
+                <th>Область E(f)</th>
+                <th>Опорные точки наизусть</th>
+                <th>Асимптоты</th>
+                <th>Чётность</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${window.MathCore.FUNCTIONS.map(fn => `
+                <tr>
+                  <td><b>${fn.name}</b><br><span class="math-inline">${fn.latex}</span></td>
+                  <td><div class="short-test-desc"><b>${fn.shortTestDesc || fn.description}</b></div></td>
+                  <td><span class="math-inline">${fn.domain}</span></td>
+                  <td><span class="math-inline">${fn.range}</span></td>
+                  <td>
+                    ${fn.keyPoints.slice(0, 3).map(p => p.label).join(', ')}
+                  </td>
+                  <td>
+                    ${fn.asymptotes.length ? fn.asymptotes.map(a => a.label).join('; ') : '—'}
+                  </td>
+                  <td>${fn.parity === 'even' ? 'Чётная' : fn.parity === 'odd' ? 'Нечётная' : 'Общего вида'}</td>
+                </tr>
+              `).join('')}
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <!-- БЛОК 2: ТАБЛИЦА ВСЕХ ПРЕОБРАЗОВАНИЙ -->
+      <section class="cheat-section">
+        <h3 class="section-title">
+          <span class="section-badge">Часть 2</span>
           Таблица всех преобразований графиков
         </h3>
         <div class="table-responsive">
@@ -120,10 +160,10 @@
         </div>
       </section>
 
-      <!-- БЛОК 2: АЛГОРИТМ ПОСТРОЕНИЯ СЛОЖНЫХ ГРАФИКОВ -->
+      <!-- БЛОК 3: АЛГОРИТМ ПОСТРОЕНИЯ СЛОЖНЫХ ГРАФИКОВ -->
       <section class="cheat-section">
         <h3 class="section-title">
-          <span class="section-badge">Часть 2</span>
+          <span class="section-badge">Часть 3</span>
           Порядок действий при построении y = A · f(B(x - C)) + D
         </h3>
         <div class="cheat-pipeline-box">
@@ -156,46 +196,6 @@
             <div class="p-title">Сдвиг по Oy</div>
             <div class="p-desc">y = ... + D: поднимаем на D вверх или опускаем вниз</div>
           </div>
-        </div>
-      </section>
-
-      <!-- БЛОК 3: ПАСПОРТ БАЗОВЫХ ГРАФИКОВ К ЗАЧЕТУ -->
-      <section class="cheat-section">
-        <h3 class="section-title">
-          <span class="section-badge">Часть 3</span>
-          Сводная таблица функций к зачёту (опорные точки и асимптоты)
-        </h3>
-        <div class="table-responsive">
-          <table class="cheat-table">
-            <thead>
-              <tr>
-                <th>Функция</th>
-                <th>Форма графика</th>
-                <th>Область D(f)</th>
-                <th>Область E(f)</th>
-                <th>Опорные точки наизусть</th>
-                <th>Асимптоты</th>
-                <th>Чётность</th>
-              </tr>
-            </thead>
-            <tbody>
-              ${window.MathCore.FUNCTIONS.map(fn => `
-                <tr>
-                  <td><b>${fn.name}</b><br><span class="math-inline">${fn.latex}</span></td>
-                  <td>${fn.categoryName}</td>
-                  <td><span class="math-inline">${fn.domain}</span></td>
-                  <td><span class="math-inline">${fn.range}</span></td>
-                  <td>
-                    ${fn.keyPoints.slice(0, 3).map(p => p.label).join(', ')}
-                  </td>
-                  <td>
-                    ${fn.asymptotes.length ? fn.asymptotes.map(a => a.label).join('; ') : '—'}
-                  </td>
-                  <td>${fn.parity === 'even' ? 'Чётная' : fn.parity === 'odd' ? 'Нечётная' : 'Общего вида'}</td>
-                </tr>
-              `).join('')}
-            </tbody>
-          </table>
         </div>
       </section>
 
